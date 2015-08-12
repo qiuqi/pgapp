@@ -28,10 +28,11 @@ init(Args) ->
     process_flag(trap_exit, true),
     {ok, connect(#state{start_args = Args, delay = ?INITIAL_DELAY})}.
 
-handle_call({squery, Sql}, _From, #state{conn=Conn} = State) when Conn /= undefined ->
+handle_call(_Query, _From, #state{conn = undefined} = State) ->
+    {reply, {error, disconnected}, State};
+handle_call({squery, Sql}, _From, #state{conn = Conn} = State) ->
     {reply, epgsql:squery(Conn, Sql), State};
-
-handle_call({equery, Sql, Params}, _From, #state{conn = Conn} = State) when Conn /= undefined ->
+handle_call({equery, Sql, Params}, _From, #state{conn = Conn} = State) ->
     {reply, epgsql:equery(Conn, Sql, Params), State}.
 
 handle_cast(reconnect, State) ->
@@ -58,7 +59,9 @@ handle_info({'EXIT', From, Reason}, State) ->
       [self(), From, Reason, NewDelay]),
     {noreply, State#state{conn = undefined, delay = NewDelay, timer = Tref}}.
 
-terminate(_Reason, #state{conn=Conn}) ->
+terminate(_Reason, #state{conn = undefined}) ->
+    ok;
+terminate(_Reason, #state{conn = Conn}) ->
     ok = epgsql:close(Conn),
     ok.
 
